@@ -2,6 +2,7 @@ from time import sleep
 from random import randint, choice
 from tkinter import *
 from math import sqrt, exp, pi
+from graphtool import graph
 
 
 #This is our function to convert the numbers into something the neural network can properly understand
@@ -22,7 +23,7 @@ def rectifyD(x):
 #Convert function for hexidecimal colours(only numerical type that will be accepted by tkinter)
 #https://stackoverflow.com/questions/51591456/can-i-use-rgb-in-tkinter
 def convert(r, g, b):
-    return '#%02x%02x%02x' % (r, g, b)
+    return '#%02x%02x%02x' % (int(r), int(g), int(b))
 
 
 #Random number generator improvised by me because I tried to learn about bell curve distribution and was immediately swarmed with pages of integrals. Not impressed
@@ -37,27 +38,29 @@ for i in range(100):
 
 def generateNumber():
     x = numbers[randint(0, len(numbers))]/100
-    if randint(0, 1) == 0:
-        return x
-    else:
-        return -x
+    return x
 
 
 class network:
 
     #Weight indexing self.weights[layer][from][to]
 
-    def __init__(self, inputNodes, hiddenLayers, outputNodes, lr, interface = True, displayStats = True):
+    def __init__(self, inputNodes, hiddenLayers, outputNodes, lr, interface = True, displayStats = True, forwardGraph = True, forwardGraphLength = 1000, forwardGraphHeight = 5):
 
         self.learningRate = lr
         self.epochs = 0
         self.costList = list()
         self.displayStats = displayStats
+        self.forwardGraph = forwardGraph
         
         self.nodes = list()
         self.nodes.append([0 for x in range(inputNodes)])
         self.nodes.append([0 for x in range(hiddenLayers[0])])
         self.nodes.append([0 for x in range(outputNodes)])
+
+        self.bias = list()
+        for i in range(len(hiddenLayers)+1):
+            self.bias.append(0)
 
         self.sums = self.nodes
 
@@ -154,6 +157,11 @@ class network:
             self.epochDESC = self.c.create_text(400, 40, fill = 'red', text = 'EPOCHS', font = ('', 10))
             self.sampleDESC = self.c.create_text(800, 40, fill = 'red', text = 'AVERAGE COST', font = ('', 10))
 
+        if self.forwardGraph == True:
+            self.averageCostGraph = graph('AVERAGE COST', forwardGraphHeight, forwardGraphLength)
+            self.individualCostGraph = graph('INDIVIDUAL COST', forwardGraphHeight, forwardGraphLength)
+            #self.deltaWeightGraph = graph('DELTA WEIGHT', 0.2, 1000)
+            #self.deltaBiasGraph = graph('DELTA BIAS', 0.2, 1000)
 
     def addLayer(self):
 
@@ -209,9 +217,9 @@ class network:
 
             for node in range(len(self.nodes[(layer)+1])):
 
-                self.sums[layer+1][node] = round(sum([self.nodes[layer][previousNode] * self.weights[layer][previousNode][node] for previousNode in range(len(self.nodes[layer]))]), 2)
+                self.sums[layer+1][node] = round(sum([self.nodes[layer][previousNode] * self.weights[layer][previousNode][node] for previousNode in range(len(self.nodes[layer]))])+self.bias[layer], 4)
 
-            self.nodes[layer+1] = list(map(rectifyN, self.sums[layer+1]))
+                self.nodes[layer+1][node] = rectifyN(self.sums[layer+1][node])
 
         #Interface update
         if self.interface == True:
@@ -237,6 +245,10 @@ class network:
             self.c.itemconfig(self.costText, text = round(self.costFN(), 4))
             self.c.itemconfig(self.epochText, text = round(self.epochs, 4))
             self.c.itemconfig(self.sampleCostText, text = round(average, 4))
+
+        if self.forwardGraph == True:
+            self.averageCostGraph.plot(self.epochs, round(average, 2))
+            self.individualCostGraph.plot(self.epochs, round(self.costFN(), 2))
 
 
     def backpropagate(self):
@@ -266,8 +278,11 @@ class network:
                     cache = slopes[layer][toNode] * rectifyD(self.sums[-(layer+1)][toNode])
 
                     self.weights[-(layer+1)][fromNode][toNode] -= cache * self.nodes[-(layer+2)][fromNode] * self.learningRate
+                    self.bias[-layer] -= cache * 1 * self.learningRate
 
                     slopes[-1][-1] += cache * self.weights[-(layer+1)][fromNode][toNode]
+
+                    
 
 
         for layer in range(len(self.weights)):
